@@ -7,6 +7,7 @@ import org.json.JSONObject
 import org.webrtc.*
 import java.nio.ByteBuffer
 import java.nio.charset.Charset
+import java.util.*
 
 /**
  * This class handles all around WebRTC peer connections.
@@ -21,37 +22,59 @@ class ServerlessRTCClient(val console: IConsole, val context: Context, val liste
     /**
      * List of servers that will be used to establish the direct connection, STUN/TURN should be supported.
      */
-    val iceServers = arrayListOf(PeerConnection.IceServer("stun:stun.l.google.com:19302"))
+
+    private fun getIceServer(): List<PeerConnection.IceServer> {
+
+        val iceServerStunBuilder = PeerConnection.IceServer.builder("stun://stun.l.google.com:19302")
+        iceServerStunBuilder.setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_INSECURE_NO_CHECK)
+
+        val iceServerTurnBuilder = PeerConnection.IceServer.builder("turn:82.99.243.100:3478")
+        iceServerTurnBuilder.setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_INSECURE_NO_CHECK)
+        iceServerTurnBuilder.setUsername("myturn")
+        iceServerTurnBuilder.setPassword("password")
+
+        val iceServers: MutableList<PeerConnection.IceServer> = ArrayList()
+        iceServers.add(iceServerStunBuilder.createIceServer())
+        iceServers.add(iceServerTurnBuilder.createIceServer())
+        return iceServers
+    }
 
     enum class State {
         /**
          * Initialization in progress.
          */
         INITIALIZING,
+
         /**
          * App is waiting for offer, fill in the offer into the edit text.
          */
         WAITING_FOR_OFFER,
+
         /**
          * App is creating the offer.
          */
         CREATING_OFFER,
+
         /**
          * App is creating answer to offer.
          */
         CREATING_ANSWER,
+
         /**
          * App created the offer and is now waiting for answer
          */
         WAITING_FOR_ANSWER,
+
         /**
          * Waiting for establishing the connection.
          */
         WAITING_TO_CONNECT,
+
         /**
          * Connection was established. You can chat now.
          */
         CHAT_ESTABLISHED,
+
         /**
          * Connection is terminated chat ended.
          */
@@ -61,7 +84,7 @@ class ServerlessRTCClient(val console: IConsole, val context: Context, val liste
     lateinit var pcf: PeerConnectionFactory
     val pcConstraints = object : MediaConstraints() {
         init {
-            optional.add(MediaConstraints.KeyValuePair("DtlsSrtpKeyAgreement", "true"))
+            optional.add(KeyValuePair("DtlsSrtpKeyAgreement", "true"))
         }
     }
 
@@ -70,7 +93,6 @@ class ServerlessRTCClient(val console: IConsole, val context: Context, val liste
             field = value
             listener.onStateChanged(value)
         }
-        get
 
 
     interface IStateChangeListener {
@@ -183,11 +205,7 @@ class ServerlessRTCClient(val console: IConsole, val context: Context, val liste
     private val JSON_MESSAGE = "message"
     private val JSON_SDP = "sdp"
 
-    /**
-     * Converts session description object to JSON object that can be used in other applications.
-     * This is what is passed between parties to maintain connection. We need to pass the session description to the other side.
-     * In normal use case we should use some kind of signalling server, but for this demo you can use some other method to pass it there (like e-mail).
-     */
+
     fun sessionDescriptionToJSON(sessDesc: SessionDescription): JSONObject {
         val json = JSONObject()
         json.put(JSON_TYPE, sessDesc.type.canonicalForm())
@@ -216,7 +234,13 @@ class ServerlessRTCClient(val console: IConsole, val context: Context, val liste
             if (type != null && sdp != null && type == "offer") {
                 val offer = SessionDescription(SessionDescription.Type.OFFER, sdp)
                 pcInitialized = true
-                pc = pcf.createPeerConnection(iceServers, pcConstraints, object : DefaultObserver() {
+
+                val iceServers = getIceServer()
+
+                val rtcConfig = PeerConnection.RTCConfiguration(iceServers)
+                rtcConfig.iceTransportsType = PeerConnection.IceTransportsType.RELAY
+
+                pc = pcf.createPeerConnection(rtcConfig, object : DefaultObserver() {
                     override fun onIceCandidatesRemoved(p0: Array<out IceCandidate>?) {
                         p0?.forEach { console.d("ice candidatesremoved: {${it.serverUrl}") }
                     }
@@ -305,7 +329,11 @@ class ServerlessRTCClient(val console: IConsole, val context: Context, val liste
     fun makeOffer() {
         state = State.CREATING_OFFER
         pcInitialized = true
-        pc = pcf.createPeerConnection(iceServers, pcConstraints, object : DefaultObserver() {
+
+        val rtcConfig = PeerConnection.RTCConfiguration(getIceServer())
+        rtcConfig.iceTransportsType = PeerConnection.IceTransportsType.RELAY
+
+        pc = pcf.createPeerConnection(rtcConfig, object : DefaultObserver() {
             override fun onIceCandidatesRemoved(p0: Array<out IceCandidate>?) {
                 TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
             }
@@ -368,9 +396,9 @@ class ServerlessRTCClient(val console: IConsole, val context: Context, val liste
      * Call this before using anything else from PeerConnection.
      */
     fun init() {
-        val initializeOptions=PeerConnectionFactory.InitializationOptions.builder(context).setEnableVideoHwAcceleration(false).setEnableInternalTracer(false).createInitializationOptions()
+        val initializeOptions = PeerConnectionFactory.InitializationOptions.builder(context).setEnableVideoHwAcceleration(false).setEnableInternalTracer(false).createInitializationOptions()
         PeerConnectionFactory.initialize(initializeOptions)
-        val options=PeerConnectionFactory.Options()
+        val options = PeerConnectionFactory.Options()
         pcf = PeerConnectionFactory.builder().setOptions(options).createPeerConnectionFactory()
         state = State.INITIALIZING
     }
