@@ -26,12 +26,12 @@ class ServerlessRTCClient(val console: IConsole, val context: Context, val liste
     private fun getIceServer(): List<PeerConnection.IceServer> {
 
         val iceServerStunBuilder = PeerConnection.IceServer.builder("stun://stun.l.google.com:19302")
-        iceServerStunBuilder.setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_INSECURE_NO_CHECK)
+        iceServerStunBuilder.setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
 
-        val iceServerTurnBuilder = PeerConnection.IceServer.builder("turn:82.99.243.100:3478")
-        iceServerTurnBuilder.setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_INSECURE_NO_CHECK)
-        iceServerTurnBuilder.setUsername("myturn")
-        iceServerTurnBuilder.setPassword("password")
+        val iceServerTurnBuilder = PeerConnection.IceServer.builder("turn:meet-jit-si-turnrelay.jitsi.net:443?transport=tcp")
+        iceServerTurnBuilder.setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
+        iceServerTurnBuilder.setUsername("1603956123")
+        iceServerTurnBuilder.setPassword("ZglMMZtl1u/lvqVbTz3HDpTFwso=")
 
         val iceServers: MutableList<PeerConnection.IceServer> = ArrayList()
         iceServers.add(iceServerStunBuilder.createIceServer())
