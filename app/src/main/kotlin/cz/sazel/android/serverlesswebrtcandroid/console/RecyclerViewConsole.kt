@@ -3,7 +3,7 @@ package cz.sazel.android.serverlesswebrtcandroid.console
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.support.v7.widget.RecyclerView
+import androidx.recyclerview.widget.RecyclerView
 import cz.sazel.android.serverlesswebrtcandroid.adapters.ConsoleAdapter
 import java.util.*
 
@@ -20,7 +20,7 @@ class RecyclerViewConsole(val view: RecyclerView) : IConsole {
     override fun printf(text: String, vararg args: Any) {
         handler.post {
             lines.add(String.format(Locale.getDefault(), text, args))
-            view.adapter.notifyItemInserted(lines.size - 1)
+            view.adapter?.notifyItemInserted(lines.size - 1)
             view.smoothScrollToPosition(lines.size - 1)
         }
     }

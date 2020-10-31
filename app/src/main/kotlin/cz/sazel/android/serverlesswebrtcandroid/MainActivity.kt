@@ -1,67 +1,112 @@
 package cz.sazel.android.serverlesswebrtcandroid
 
+import android.Manifest
 import android.os.Bundle
-import android.support.v4.app.ActivityCompat
-import android.support.v7.app.AppCompatActivity
-import android.support.v7.widget.LinearLayoutManager
 import android.view.Menu
 import android.view.MenuItem
-import android.view.View
 import android.view.View.GONE
 import android.view.View.VISIBLE
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.recyclerview.widget.LinearLayoutManager
 import cz.sazel.android.serverlesswebrtcandroid.R.layout.activity_main
 import cz.sazel.android.serverlesswebrtcandroid.console.RecyclerViewConsole
 import cz.sazel.android.serverlesswebrtcandroid.webrtc.ServerlessRTCClient
 import cz.sazel.android.serverlesswebrtcandroid.webrtc.ServerlessRTCClient.State.*
 import kotlinx.android.synthetic.main.activity_main.*
+import org.webrtc.*
+import pub.devrel.easypermissions.AfterPermissionGranted
+import pub.devrel.easypermissions.EasyPermissions
 
-class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListener, ActivityCompat.OnRequestPermissionsResultCallback {
-
+class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListener,
+    ActivityCompat.OnRequestPermissionsResultCallback {
 
     lateinit var console: RecyclerViewConsole
 
     lateinit var client: ServerlessRTCClient
     var mnuCreateOffer: MenuItem? = null
 
-
     private var retainInstance: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(activity_main)
+
+        initRecyclerView(savedInstanceState)
+        initServerLessRtc()
+
+        start()
+
+        btSubmit.setOnClickListener { sendMessage() }
+        edEnterArea.setOnEditorActionListener { _, _, _ ->
+            sendMessage()
+            true
+        }
+    }
+
+    @AfterPermissionGranted(RC_CALL)
+    private fun start() {
+        val perms = arrayOf(
+            Manifest.permission.CAMERA,
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.MODIFY_AUDIO_SETTINGS,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        )
+        if (EasyPermissions.hasPermissions(this, *perms)) {
+
+            client.initializeSurfaceViews(surfaceViewLocal, surfaceViewRemote)
+
+            client.createVideoTrackFromCameraAndShowIt()
+
+        } else {
+            EasyPermissions.requestPermissions(
+                this,
+                "Need some permissions",
+                RC_CALL,
+                *perms
+            )
+        }
+    }
+
+    private fun initRecyclerView(savedInstanceState: Bundle?) {
         val layoutManager = LinearLayoutManager(this)
         recyclerView.layoutManager = layoutManager
-
         layoutManager.stackFromEnd = true
         console = RecyclerViewConsole(recyclerView)
         console.initialize(savedInstanceState)
         recyclerView.addOnLayoutChangeListener { v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
             if (bottom < oldBottom) {
-                recyclerView.postDelayed({ recyclerView.smoothScrollToPosition(console.lines.size) }, 100)
+                recyclerView.postDelayed(
+                    { recyclerView.smoothScrollToPosition(console.lines.size) },
+                    100
+                )
             }
         }
+    }
+
+    private fun initServerLessRtc() {
         val retainedClient = lastCustomNonConfigurationInstance as ServerlessRTCClient?
         if (retainedClient == null) {
-            client = ServerlessRTCClient(console, applicationContext, this)
+
+            client = ServerlessRTCClient(
+                console,
+                applicationContext,
+                EglBase.create(),
+                this
+            )
             try {
-                client.init()
-            } catch (e:Exception) {
-                Toast.makeText(this,e.message,Toast.LENGTH_LONG).show()
+                client.initializePeerConnectionFactory()
+            } catch (e: Exception) {
+                Toast.makeText(this, e.message, Toast.LENGTH_LONG).show()
                 e.printStackTrace()
             }
         } else {
             client = retainedClient
             onStateChanged(client.state)
         }
-
-        btSubmit.setOnClickListener { sendMessage() }
-        edEnterArea.setOnEditorActionListener { _, _, _->
-            sendMessage()
-            true
-        }
     }
-
 
     private fun sendMessage() {
         val newText = edEnterArea.text.toString().trim()
@@ -84,24 +129,23 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
         return client
     }
 
-
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menuInflater.inflate(R.menu.menu, menu)
         mnuCreateOffer = menu?.findItem(R.id.mnuCreateOffer)
         return true
     }
 
-    override fun onOptionsItemSelected(item: MenuItem?): Boolean {
-        when (item?.itemId) {
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        when (item.itemId) {
             R.id.mnuCreateOffer -> client.makeOffer()
         }
 
         return super.onOptionsItemSelected(item)
     }
 
-    override fun onSaveInstanceState(outState: Bundle?) {
+    override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        if (outState != null) console.onSaveInstanceState(outState)
+        console.onSaveInstanceState(outState)
     }
 
 
@@ -128,10 +172,23 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
         }
     }
 
-    override fun onDestroy() {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        EasyPermissions.onRequestPermissionsResult(requestCode, permissions, grantResults, this)
+    }
+
+    /*override fun onDestroy() {
         if (!retainInstance)
             client.destroy()
         super.onDestroy()
 
+    }*/
+
+    companion object {
+        private const val RC_CALL = 111
     }
 }
