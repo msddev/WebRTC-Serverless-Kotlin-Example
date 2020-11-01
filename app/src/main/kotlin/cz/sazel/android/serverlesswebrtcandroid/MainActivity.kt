@@ -2,6 +2,7 @@ package cz.sazel.android.serverlesswebrtcandroid
 
 import android.Manifest
 import android.os.Bundle
+import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View.GONE
@@ -60,6 +61,11 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
 
             client.createVideoTrackFromCameraAndShowIt()
 
+            client.initializePeerConnections()
+
+            client.startStreamingVideo()
+
+
         } else {
             EasyPermissions.requestPermissions(
                 this,
@@ -114,10 +120,7 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
             WAITING_FOR_OFFER -> client.processOffer(newText)
             WAITING_FOR_ANSWER -> client.processAnswer(newText)
             CHAT_ESTABLISHED -> {
-                if (newText.isNotBlank()) {
-                    client.sendMessage(newText)
-                    console.printf("&gt;$newText")
-                }
+                Log.d("ggggg", "sendMessage: ggggggggggggggggggg")
             }
             else -> if (newText.isNotBlank()) console.printf(newText)
         }
@@ -180,13 +183,6 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         EasyPermissions.onRequestPermissionsResult(requestCode, permissions, grantResults, this)
     }
-
-    /*override fun onDestroy() {
-        if (!retainInstance)
-            client.destroy()
-        super.onDestroy()
-
-    }*/
 
     companion object {
         private const val RC_CALL = 111

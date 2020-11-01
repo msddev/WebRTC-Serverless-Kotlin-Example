@@ -6,10 +6,7 @@ import cz.sazel.android.serverlesswebrtcandroid.console.IConsole
 import org.json.JSONException
 import org.json.JSONObject
 import org.webrtc.*
-import java.nio.ByteBuffer
-import java.nio.charset.Charset
 import java.util.*
-
 
 /**
  * This class handles all around WebRTC peer connections.
@@ -22,11 +19,10 @@ class ServerlessRTCClient(
 ) {
 
     private lateinit var remoteVideoTrack: VideoTrack
-
     private lateinit var surfaceViewLocal: SurfaceViewRenderer
     private lateinit var surfaceViewRemote: SurfaceViewRenderer
 
-    lateinit var peerConnection: PeerConnection
+    private var peerConnection: PeerConnection? = null
     private var pcInitialized: Boolean = false
 
     var channel: DataChannel? = null
@@ -128,11 +124,94 @@ class ServerlessRTCClient(
         return Camera2Enumerator.isSupported(context)
     }
 
-    private fun startStreamingVideo() {
+    fun initializePeerConnections() {
+        peerConnection = createPeerConnection(peerConnectionFactory)
+    }
+
+    private fun createPeerConnection(factory: PeerConnectionFactory): PeerConnection? {
+        val rtcConfig = PeerConnection.RTCConfiguration(getIceServer())
+        rtcConfig.iceTransportsType = PeerConnection.IceTransportsType.RELAY
+        val pcObserver: PeerConnection.Observer = object : PeerConnection.Observer {
+            override fun onSignalingChange(signalingState: PeerConnection.SignalingState) {
+                console.d("signaling state change:${signalingState.name}")
+            }
+
+            override fun onIceConnectionChange(iceConnectionState: PeerConnection.IceConnectionState) {
+                console.d("ice connection state change:${iceConnectionState.name}")
+                if (iceConnectionState == PeerConnection.IceConnectionState.DISCONNECTED) {
+                    console.d("closing channel")
+                    channel?.close()
+                }
+            }
+
+            override fun onIceConnectionReceivingChange(b: Boolean) {
+                console.d("ice connection receiving change:{$b}")
+            }
+
+            override fun onIceGatheringChange(iceGatheringState: PeerConnection.IceGatheringState) {
+                console.d("ice gathering state change:${iceGatheringState.name}")
+
+                if (iceGatheringState == PeerConnection.IceGatheringState.COMPLETE) {
+                    peerConnection?.localDescription?.let {
+                        if (it.type == SessionDescription.Type.OFFER) {
+                            console.printf("Your offer is:")
+                            console.greenf("${sessionDescriptionToJSON(it)}")
+                            state = State.WAITING_FOR_ANSWER
+                        } else if (it.type == SessionDescription.Type.ANSWER) {
+                            //ICE gathering complete, we should have answer now
+                            doShowAnswer(it)
+                            state = State.WAITING_TO_CONNECT
+                        }
+                    }
+                }
+            }
+
+            override fun onIceCandidate(iceCandidate: IceCandidate) {
+                console.d("ice candidate:{${iceCandidate.sdp}}")
+            }
+
+            override fun onIceCandidatesRemoved(iceCandidates: Array<IceCandidate>) {
+                iceCandidates.forEach { console.d("ice candidatesremoved: {${it.serverUrl}") }
+            }
+
+            override fun onAddStream(mediaStream: MediaStream) {
+                console.d("Add Stream: " + mediaStream.videoTracks.size)
+
+                if (mediaStream.videoTracks.isNotEmpty()) {
+                    remoteVideoTrack = mediaStream.videoTracks[0]
+                    remoteVideoTrack.setEnabled(true)
+                    remoteVideoTrack.addSink(surfaceViewRemote)
+                }
+                if (mediaStream.audioTracks.isNotEmpty()) {
+                    val remoteAudioTrack = mediaStream.audioTracks[0]
+                    remoteAudioTrack.setEnabled(true)
+                }
+            }
+
+            override fun onRemoveStream(mediaStream: MediaStream) {
+                Log.d(TAG, "onRemoveStream: ")
+            }
+
+            override fun onDataChannel(dataChannel: DataChannel) {
+                Log.d(TAG, "onDataChannel: ")
+            }
+
+            override fun onRenegotiationNeeded() {
+                console.d("renegotiation needed")
+            }
+
+            override fun onAddTrack(p0: RtpReceiver?, p1: Array<out MediaStream>?) {
+                console.d("onAddTrack")
+            }
+        }
+        return factory.createPeerConnection(rtcConfig, pcObserver)
+    }
+
+    fun startStreamingVideo() {
         val mediaStream = peerConnectionFactory.createLocalMediaStream("ARDAMS")
         mediaStream.addTrack(videoTrackFromCamera)
         mediaStream.addTrack(localAudioTrack)
-        peerConnection.addStream(mediaStream)
+        peerConnection?.addStream(mediaStream)
     }
 
     /**
@@ -148,8 +227,8 @@ class ServerlessRTCClient(
         val iceServerTurnBuilder =
             PeerConnection.IceServer.builder("turn:meet-jit-si-turnrelay.jitsi.net:443?transport=tcp")
         iceServerTurnBuilder.setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
-        iceServerTurnBuilder.setUsername("1603956123")
-        iceServerTurnBuilder.setPassword("ZglMMZtl1u/lvqVbTz3HDpTFwso=")
+        iceServerTurnBuilder.setUsername("1604297202")
+        iceServerTurnBuilder.setPassword("MFRfjzEihdNc4TdKP6S5MuhV9Tw")
 
         val iceServers: MutableList<PeerConnection.IceServer> = ArrayList()
         iceServers.add(iceServerStunBuilder.createIceServer())
@@ -199,8 +278,8 @@ class ServerlessRTCClient(
         CHAT_ENDED
     }
 
-    lateinit var peerConnectionFactory: PeerConnectionFactory
-    val sdpMediaConstraints = object : MediaConstraints() {
+    private lateinit var peerConnectionFactory: PeerConnectionFactory
+    private val sdpMediaConstraints = object : MediaConstraints() {
         init {
             mandatory.add(KeyValuePair("OfferToReceiveAudio", "true"))
             mandatory.add(KeyValuePair("OfferToReceiveVideo", "true"))
@@ -221,55 +300,6 @@ class ServerlessRTCClient(
         fun onStateChanged(state: State)
     }
 
-    abstract inner class DefaultObserver : PeerConnection.Observer {
-
-        override fun onDataChannel(p0: DataChannel?) {
-            console.d("data channel ${p0?.label()} established")
-        }
-
-        override fun onIceConnectionReceivingChange(p0: Boolean) {
-            console.d("ice connection receiving change:{$p0}")
-        }
-
-        override fun onIceConnectionChange(p0: PeerConnection.IceConnectionState?) {
-            console.d("ice connection state change:${p0?.name}")
-            if (p0 == PeerConnection.IceConnectionState.DISCONNECTED) {
-                console.d("closing channel")
-                channel?.close()
-            }
-        }
-
-        override fun onIceGatheringChange(p0: PeerConnection.IceGatheringState?) {
-            console.d("ice gathering state change:${p0?.name}")
-        }
-
-        override fun onAddStream(mediaStream: MediaStream) {
-            console.d("Add Stream: " + mediaStream.videoTracks.size)
-
-            if (mediaStream.videoTracks.isNotEmpty()) {
-                remoteVideoTrack = mediaStream.videoTracks[0]
-                remoteVideoTrack.setEnabled(true)
-                remoteVideoTrack.addSink(surfaceViewRemote)
-            }
-            if (mediaStream.audioTracks.isNotEmpty()) {
-                val remoteAudioTrack = mediaStream.audioTracks[0]
-                remoteAudioTrack.setEnabled(true)
-            }
-        }
-
-        override fun onRemoveStream(p0: MediaStream?) {
-
-        }
-
-        override fun onSignalingChange(p0: PeerConnection.SignalingState?) {
-            console.d("signaling state change:${p0?.name}")
-        }
-
-        override fun onRenegotiationNeeded() {
-            console.d("renegotiation needed")
-        }
-    }
-
     open inner class DefaultSdpObserver : SdpObserver {
 
         override fun onCreateSuccess(p0: SessionDescription?) {
@@ -286,44 +316,6 @@ class ServerlessRTCClient(
 
         override fun onSetSuccess() {
             console.i("set success")
-        }
-
-    }
-
-
-    private val UTF_8 = Charset.forName("UTF-8")
-
-    open inner class DefaultDataChannelObserver(val channel: DataChannel) : DataChannel.Observer {
-        override fun onMessage(p0: DataChannel.Buffer?) {
-            val buf = p0?.data
-            if (buf != null) {
-                val byteArray = ByteArray(buf.remaining())
-                buf.get(byteArray)
-                val received = kotlin.text.String(byteArray, UTF_8)
-                try {
-                    val message = JSONObject(received).getString(JSON_MESSAGE)
-                    console.bluef("&gt;$message")
-                } catch (e: JSONException) {
-                    console.redf("Malformed message received")
-                }
-
-
-            }
-        }
-
-        override fun onBufferedAmountChange(p0: Long) {
-            console.d("channel buffered amount change:{$p0}")
-        }
-
-        override fun onStateChange() {
-            console.d("Channel state changed:${channel.state()?.name}}")
-            if (channel.state() == DataChannel.State.OPEN) {
-                state = State.CHAT_ESTABLISHED
-                console.bluef("Chat established.")
-            } else {
-                state = State.CHAT_ENDED
-                console.redf("Chat ended.")
-            }
         }
     }
 
@@ -364,42 +356,17 @@ class ServerlessRTCClient(
                 val rtcConfig = PeerConnection.RTCConfiguration(getIceServer())
                 rtcConfig.iceTransportsType = PeerConnection.IceTransportsType.RELAY
 
-                peerConnection = peerConnectionFactory.createPeerConnection(
-                    rtcConfig,
-                    object : DefaultObserver() {
-                        override fun onIceCandidatesRemoved(p0: Array<out IceCandidate>?) {
-                            p0?.forEach { console.d("ice candidatesremoved: {${it.serverUrl}") }
-                        }
-
-                        override fun onAddTrack(p0: RtpReceiver?, p1: Array<out MediaStream>?) {
-                            console.d("onAddTrack")
-                        }
-
-                        override fun onIceGatheringChange(p0: PeerConnection.IceGatheringState?) {
-                            super.onIceGatheringChange(p0)
-                            //ICE gathering complete, we should have answer now
-                            if (p0 == PeerConnection.IceGatheringState.COMPLETE) {
-                                doShowAnswer(peerConnection.localDescription)
-                                state = State.WAITING_TO_CONNECT
-                            }
-                        }
-
-                        override fun onIceCandidate(iceCandidate: IceCandidate) {
-                            console.d("ice candidate:{${iceCandidate.sdp}}")
-                        }
-                    })!!
-
                 //we have remote offer, let's create answer for that
-                peerConnection.setRemoteDescription(object : DefaultSdpObserver() {
+                peerConnection?.setRemoteDescription(object : DefaultSdpObserver() {
                     override fun onSetSuccess() {
                         super.onSetSuccess()
                         console.d("Remote description set.")
 
-                        peerConnection.createAnswer(object : DefaultSdpObserver() {
+                        peerConnection?.createAnswer(object : DefaultSdpObserver() {
                             override fun onCreateSuccess(p0: SessionDescription?) {
                                 //answer is ready, set it
                                 console.d("Local description set.")
-                                peerConnection.setLocalDescription(DefaultSdpObserver(), p0)
+                                peerConnection?.setLocalDescription(DefaultSdpObserver(), p0)
                             }
                         }, MediaConstraints())
 
@@ -427,7 +394,7 @@ class ServerlessRTCClient(
             state = State.WAITING_TO_CONNECT
             if (type != null && sdp != null && type == "answer") {
                 val answer = SessionDescription(SessionDescription.Type.ANSWER, sdp)
-                peerConnection.setRemoteDescription(DefaultSdpObserver(), answer)
+                peerConnection?.setRemoteDescription(DefaultSdpObserver(), answer)
             } else {
                 console.redf("Invalid or unsupported answer.")
                 state = State.WAITING_FOR_ANSWER
@@ -453,66 +420,18 @@ class ServerlessRTCClient(
         val rtcConfig = PeerConnection.RTCConfiguration(getIceServer())
         rtcConfig.iceTransportsType = PeerConnection.IceTransportsType.RELAY
 
-        peerConnection =
-            peerConnectionFactory.createPeerConnection(rtcConfig, object : DefaultObserver() {
-                override fun onIceCandidatesRemoved(p0: Array<out IceCandidate>?) {
 
-                }
-
-                override fun onAddTrack(p0: RtpReceiver?, p1: Array<out MediaStream>?) {
-
-                }
-
-                override fun onIceCandidate(p0: IceCandidate?) {
-                    console.d("ice candidate:{${p0?.sdp}}")
-                }
-
-                override fun onIceGatheringChange(p0: PeerConnection.IceGatheringState?) {
-                    super.onIceGatheringChange(p0)
-                    if (p0 == PeerConnection.IceGatheringState.COMPLETE) {
-                        console.printf("Your offer is:")
-                        console.greenf("${sessionDescriptionToJSON(peerConnection.localDescription)}")
-                        state = State.WAITING_FOR_ANSWER
-                    }
-                }
-            })!!
-
-        startStreamingVideo()
-
-        peerConnection.createOffer(object : DefaultSdpObserver() {
+        peerConnection?.createOffer(object : DefaultSdpObserver() {
             override fun onCreateSuccess(p0: SessionDescription?) {
                 if (p0 != null) {
                     console.d("offer updated")
-                    peerConnection.setLocalDescription(object : DefaultSdpObserver() {
+                    peerConnection?.setLocalDescription(object : DefaultSdpObserver() {
                         override fun onCreateSuccess(p0: SessionDescription?) {
                         }
                     }, p0)
                 }
             }
         }, sdpMediaConstraints)
-    }
-
-    /**
-     * Sends message to other party.
-     */
-    fun sendMessage(message: String) {
-        if (channel == null || state == State.CHAT_ESTABLISHED) {
-            val sendJSON = JSONObject()
-            sendJSON.put(JSON_MESSAGE, message)
-            val buf = ByteBuffer.wrap(sendJSON.toString().toByteArray(UTF_8))
-            channel?.send(DataChannel.Buffer(buf, false))
-        } else {
-            console.redf("Error. Chat is not established.")
-        }
-    }
-
-    /**
-     * Creates data channel for use when offer is created on this machine.
-     */
-    fun makeDataChannel() {
-        val init = DataChannel.Init()
-        channel = peerConnection.createDataChannel("test", init)
-        channel!!.registerObserver(DefaultDataChannelObserver(channel!!))
     }
 
     /**
@@ -537,19 +456,8 @@ class ServerlessRTCClient(
         Log.d(TAG, "Peer connection factory created.")
     }
 
-
-    /**
-     * Clean up some resources.
-     */
-    fun destroy() {
-        channel?.close()
-        if (pcInitialized) {
-            peerConnection.close()
-        }
-    }
-
     companion object {
-        private const val TAG = "MainActivityTags"
+        private const val TAG = "ServerLessTags"
 
         private const val VIDEO_TRACK_ID = "ARDAMSv0"
         private const val VIDEO_RESOLUTION_WIDTH = 640
