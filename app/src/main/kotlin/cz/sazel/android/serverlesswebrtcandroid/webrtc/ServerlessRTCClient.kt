@@ -3,6 +3,7 @@ package cz.sazel.android.serverlesswebrtcandroid.webrtc
 import android.content.Context
 import android.util.Log
 import cz.sazel.android.serverlesswebrtcandroid.console.IConsole
+import cz.sazel.android.serverlesswebrtcandroid.jingleTurnReceiver.JistiServiceModel
 import org.json.JSONException
 import org.json.JSONObject
 import org.webrtc.*
@@ -12,6 +13,7 @@ import java.util.*
  * This class handles all around WebRTC peer connections.
  */
 class ServerlessRTCClient(
+    val turns: MutableList<JistiServiceModel>,
     val console: IConsole,
     val context: Context,
     val rootEglBase: EglBase,
@@ -219,20 +221,44 @@ class ServerlessRTCClient(
      */
 
     private fun getIceServer(): List<PeerConnection.IceServer> {
-
-        val iceServerStunBuilder =
-            PeerConnection.IceServer.builder("stun://stun.l.google.com:19302")
-        iceServerStunBuilder.setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
-
-        val iceServerTurnBuilder =
-            PeerConnection.IceServer.builder("turn:meet-jit-si-turnrelay.jitsi.net:443?transport=tcp")
-        iceServerTurnBuilder.setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
-        iceServerTurnBuilder.setUsername("1604297202")
-        iceServerTurnBuilder.setPassword("MFRfjzEihdNc4TdKP6S5MuhV9Tw")
-
         val iceServers: MutableList<PeerConnection.IceServer> = ArrayList()
-        iceServers.add(iceServerStunBuilder.createIceServer())
-        iceServers.add(iceServerTurnBuilder.createIceServer())
+
+        PeerConnection.IceServer.builder("stun://stun.l.google.com:19302").apply {
+            setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
+            iceServers.add(createIceServer())
+        }
+
+        turns.forEach {
+            when (it.type) {
+                /*"stun" -> {
+                    PeerConnection.IceServer.builder("${it.type}:${it.host}:${it.port}").apply {
+                        setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
+                        iceServers.add(createIceServer())
+                    }
+                }*/
+                "turn" -> {
+                    PeerConnection.IceServer.builder("${it.type}:${it.host}:${it.port}?transport=tcp")
+                        .apply {
+                            setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
+                            setUsername(it.username)
+                            setPassword(it.password)
+
+                            iceServers.add(createIceServer())
+                        }
+                }
+                "turns" -> {
+                    PeerConnection.IceServer.builder("${it.type}:${it.host}:${it.port}?transport=udp")
+                        .apply {
+                            setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
+                            setUsername(it.username)
+                            setPassword(it.password)
+
+                            iceServers.add(createIceServer())
+                        }
+                }
+            }
+        }
+
         return iceServers
     }
 

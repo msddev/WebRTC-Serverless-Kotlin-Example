@@ -13,20 +13,30 @@ import androidx.core.app.ActivityCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import cz.sazel.android.serverlesswebrtcandroid.R.layout.activity_main
 import cz.sazel.android.serverlesswebrtcandroid.console.RecyclerViewConsole
+import cz.sazel.android.serverlesswebrtcandroid.jingleTurnReceiver.JingleServer
+import cz.sazel.android.serverlesswebrtcandroid.jingleTurnReceiver.JistiServiceModel
 import cz.sazel.android.serverlesswebrtcandroid.webrtc.ServerlessRTCClient
 import cz.sazel.android.serverlesswebrtcandroid.webrtc.ServerlessRTCClient.State.*
 import kotlinx.android.synthetic.main.activity_main.*
-import org.webrtc.*
+import org.java_websocket.client.WebSocketClient
+import org.java_websocket.drafts.Draft_6455
+import org.java_websocket.protocols.IProtocol
+import org.java_websocket.protocols.Protocol
+import org.webrtc.EglBase
 import pub.devrel.easypermissions.AfterPermissionGranted
 import pub.devrel.easypermissions.EasyPermissions
+import java.net.URI
+import java.util.*
+import kotlin.collections.ArrayList
 
 class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListener,
     ActivityCompat.OnRequestPermissionsResultCallback {
 
     lateinit var console: RecyclerViewConsole
 
-    lateinit var client: ServerlessRTCClient
-    var mnuCreateOffer: MenuItem? = null
+    private lateinit var client: ServerlessRTCClient
+    private lateinit var webSocketClient: WebSocketClient
+    private var mnuCreateOffer: MenuItem? = null
 
     private var retainInstance: Boolean = false
 
@@ -35,15 +45,35 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
         setContentView(activity_main)
 
         initRecyclerView(savedInstanceState)
-        initServerLessRtc()
 
-        start()
+        initJingleServer()
 
         btSubmit.setOnClickListener { sendMessage() }
         edEnterArea.setOnEditorActionListener { _, _, _ ->
             sendMessage()
             true
         }
+    }
+
+    private fun initJingleServer() {
+        val host = "wss://meet.jit.si/xmpp-websocket"
+
+        val protocols = ArrayList<IProtocol>()
+        protocols.add(Protocol("xmpp"))
+        val protocolDraft = Draft_6455(Collections.emptyList(), protocols)
+
+        val thread = Thread {
+            webSocketClient = JingleServer(URI(host), protocolDraft, object :JitsiCallback{
+                override fun receiveTurn(turns: MutableList<JistiServiceModel>) {
+                    runOnUiThread {
+                        initServerLessRtc(turns)
+                        start()
+                    }
+                }
+            })
+            webSocketClient.connect()
+        }
+        thread.start()
     }
 
     @AfterPermissionGranted(RC_CALL)
@@ -92,11 +122,12 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
         }
     }
 
-    private fun initServerLessRtc() {
+    private fun initServerLessRtc(turns: MutableList<JistiServiceModel>) {
         val retainedClient = lastCustomNonConfigurationInstance as ServerlessRTCClient?
         if (retainedClient == null) {
 
             client = ServerlessRTCClient(
+                turns,
                 console,
                 applicationContext,
                 EglBase.create(),
@@ -151,7 +182,6 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
         console.onSaveInstanceState(outState)
     }
 
-
     override fun onStateChanged(state: ServerlessRTCClient.State) {
         //it could be in different thread
         runOnUiThread {
@@ -184,7 +214,16 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
         EasyPermissions.onRequestPermissionsResult(requestCode, permissions, grantResults, this)
     }
 
+    override fun onDestroy() {
+        webSocketClient.close()
+        super.onDestroy()
+    }
+
     companion object {
         private const val RC_CALL = 111
     }
+}
+
+interface JitsiCallback{
+    fun receiveTurn(turns: MutableList<JistiServiceModel>)
 }

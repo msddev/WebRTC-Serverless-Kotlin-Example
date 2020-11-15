@@ -56,4 +56,5 @@ dependencies {
 
     implementation 'pub.devrel:easypermissions:3.0.0'
     implementation 'org.webrtc:google-webrtc:1.0.32006'
+    implementation 'org.java-websocket:Java-WebSocket:1.5.1'
 }
