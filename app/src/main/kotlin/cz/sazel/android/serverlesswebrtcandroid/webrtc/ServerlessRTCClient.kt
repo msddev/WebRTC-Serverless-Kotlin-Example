@@ -249,7 +249,6 @@ class ServerlessRTCClient(
                 "turns" -> {
                     PeerConnection.IceServer.builder("${it.type}:${it.host}:${it.port}?transport=udp")
                         .apply {
-                            setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
                             setUsername(it.username)
                             setPassword(it.password)
 

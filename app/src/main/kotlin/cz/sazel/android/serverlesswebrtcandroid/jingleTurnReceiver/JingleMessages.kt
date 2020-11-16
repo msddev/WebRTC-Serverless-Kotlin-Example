@@ -17,6 +17,7 @@ class JingleMessages {
                 6 -> "<enable resume=\"true\" xmlns=\"urn:xmpp:sm:3\"/>"
                 7 -> "<iq id=\"${params?.getValue("uuid")}:sendIQ\" to=\"meet.jit.si\" type=\"get\" xmlns=\"jabber:client\"><services xmlns=\"urn:xmpp:extdisco:1\"/></iq>"
                 8 -> "<iq from=\"60793f75-9bed-46e0-8f42-9305950ae05c@meet.jit.si/2frO_KOC\" id=\"${params?.getValue("uuid")}:sendIQ\" to=\"meet.jit.si\" type=\"get\" xmlns=\"jabber:client\"><query xmlns=\"http://jabber.org/protocol/disco#info\"/></iq>"
+                9 -> "<close xmlns=\"urn:ietf:params:xml:ns:xmpp-framing\"/>"
                 else -> ""
             }
 

@@ -145,6 +145,7 @@ class MyXmlParser {
                                     }
 
                                     Log.d("Jitsi_Server_Info", Gson().toJson(jistiServiceModel))
+                                    listener.callBack(JingleMessages.getXmlMessage(9))
                                     listener.receiveTurns(jistiServiceModel)
                                 }
                                 "${uuid + 1}:sendIQ" -> {
