@@ -19,13 +19,16 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.ayush.imagesteganographylibrary.Text.AsyncTaskCallback.TextDecodingCallback
+import com.ayush.imagesteganographylibrary.Text.AsyncTaskCallback.TextEncodingCallback
+import com.ayush.imagesteganographylibrary.Text.ImageSteganography
+import com.jaiselrahman.filepicker.activity.FilePickerActivity
+import com.jaiselrahman.filepicker.config.Configurations
+import com.jaiselrahman.filepicker.model.MediaFile
 import cz.sazel.android.serverlesswebrtcandroid.R.layout.activity_main
 import cz.sazel.android.serverlesswebrtcandroid.console.RecyclerViewConsole
 import cz.sazel.android.serverlesswebrtcandroid.jingleTurnReceiver.JingleServer
 import cz.sazel.android.serverlesswebrtcandroid.jingleTurnReceiver.JistiServiceModel
-import cz.sazel.android.serverlesswebrtcandroid.steganography.AsyncTaskCallback.TextDecodingCallback
-import cz.sazel.android.serverlesswebrtcandroid.steganography.AsyncTaskCallback.TextEncodingCallback
-import cz.sazel.android.serverlesswebrtcandroid.steganography.ImageSteganography
 import cz.sazel.android.serverlesswebrtcandroid.steganography.TextDecoding
 import cz.sazel.android.serverlesswebrtcandroid.steganography.TextEncoding
 import cz.sazel.android.serverlesswebrtcandroid.webrtc.ServerlessRTCClient
@@ -49,7 +52,8 @@ import kotlin.collections.ArrayList
 class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListener,
     ActivityCompat.OnRequestPermissionsResultCallback {
 
-    lateinit var console: RecyclerViewConsole
+    private val FILE_REQUEST_CODE: Int = 1001
+    private lateinit var console: RecyclerViewConsole
 
     private lateinit var client: ServerlessRTCClient
     private lateinit var webSocketClient: WebSocketClient
@@ -65,9 +69,9 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
 
         initJingleServer()
 
-        btSubmit.setOnClickListener { sendMessage() }
+        btSubmit.setOnClickListener { sendMessage(edEnterArea.text.toString().trim()) }
         edEnterArea.setOnEditorActionListener { _, _, _ ->
-            sendMessage()
+            sendMessage(edEnterArea.text.toString().trim())
             true
         }
     }
@@ -166,15 +170,16 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
         }
     }
 
-    private fun sendMessage() {
-        val newText = edEnterArea.text.toString().trim()
+    private fun sendMessage(newText: String) {
         when (client.state) {
             WAITING_FOR_OFFER -> client.processOffer(newText)
             WAITING_FOR_ANSWER -> client.processAnswer(newText)
             CHAT_ESTABLISHED -> {
                 Log.d("ggggg", "sendMessage: ggggggggggggggggggg")
             }
-            else -> if (newText.isNotBlank()) console.printf(newText)
+            else -> {
+                if (newText.isNotBlank()) console.printf(newText)
+            }
         }
         edEnterArea.setText("")
     }
@@ -193,10 +198,25 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.mnuCreateOffer -> client.makeOffer()
+            R.id.mnuChooseIceImage -> {
+                val intent = Intent(this, FilePickerActivity::class.java)
+                intent.putExtra(
+                    FilePickerActivity.CONFIGS, Configurations.Builder()
+                        .setCheckPermission(true)
+                        .setShowImages(true)
+                        .enableImageCapture(false)
+                        .setSingleChoiceMode(true)
+                        .setSkipZeroSizeFiles(true)
+                        .setSuffixes("png")
+                        .build()
+                )
+                startActivityForResult(intent, FILE_REQUEST_CODE)
+            }
         }
 
         return super.onOptionsItemSelected(item)
     }
+
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
@@ -226,7 +246,9 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
         }
     }
 
-    // encode and decode
+    /**
+     * encode and decode
+     */
     private fun encodedImageWithSteganography(iceCandidate: String) {
         val image = BitmapFactory.decodeResource(resources, R.drawable.mahsan_logo)
 
@@ -252,8 +274,7 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
                     }
                 }
             }
-        }
-        )
+        })
 
         textEncoding.execute(imageSteganography);
     }
@@ -275,6 +296,8 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
                     if (result.isDecoded) {
                         if (!result.isSecretKeyWrong) {
                             Log.d("TAG", result.message)
+
+                            sendMessage(result.message)
                         } else {
                             Log.d("TAG", "Wrong secret key")
                         }
@@ -303,10 +326,6 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
             intent.putExtra(Intent.EXTRA_STREAM, getUriFormFile(file))
             ContextCompat.startActivity(this, Intent.createChooser(intent, "Share Image"), null)
 
-
-            /*val bMap = BitmapFactory.decodeFile(file.absolutePath)
-            decodedImageWithSteganography(bMap)*/
-
         }.onFailure {
             it.printStackTrace()
         }
@@ -332,6 +351,24 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
     /*private fun getFileText(): String {
         return resources.openRawResource(R.raw.testfile).bufferedReader().use { it.readText() }
     }*/
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (resultCode == RESULT_OK && requestCode == FILE_REQUEST_CODE) {
+            val files: MutableList<MediaFile>? =
+                data?.getParcelableArrayListExtra(FilePickerActivity.MEDIA_FILES)
+            Log.d("TAG", "onActivityResult: ")
+
+
+            if (!files.isNullOrEmpty()) {
+                val bMap = BitmapFactory.decodeFile(files[0].path)
+                decodedImageWithSteganography(bMap)
+            } else {
+                throw Exception("onActivityResult FilePicker selected image is null or empty")
+            }
+        }
+    }
 
     override fun onRequestPermissionsResult(
         requestCode: Int,

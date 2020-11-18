@@ -4,12 +4,14 @@ import android.graphics.Bitmap;
 import android.os.AsyncTask;
 import android.util.Log;
 
+import com.ayush.imagesteganographylibrary.Text.AsyncTaskCallback.TextDecodingCallback;
+import com.ayush.imagesteganographylibrary.Text.EncodeDecode;
+import com.ayush.imagesteganographylibrary.Text.ImageSteganography;
+import com.ayush.imagesteganographylibrary.Utils.Utility;
+import com.ayush.imagesteganographylibrary.Utils.Zipping;
+
 import java.util.Iterator;
 import java.util.List;
-
-import cz.sazel.android.serverlesswebrtcandroid.steganography.AsyncTaskCallback.TextDecodingCallback;
-import cz.sazel.android.serverlesswebrtcandroid.steganography.Utils.Utility;
-import cz.sazel.android.serverlesswebrtcandroid.steganography.Utils.Zipping;
 
 public class TextDecoding extends AsyncTask<ImageSteganography, Void, ImageSteganography> {
     private static final String TAG = TextDecoding.class.getName();

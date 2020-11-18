@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
-      xmlns:app="http://schemas.android.com/apk/res-auto">
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
     <item
-            android:id="@+id/mnuCreateOffer"
-            android:title="@string/create_offer"
-            android:icon="@drawable/json"
-            app:showAsAction="ifRoom"
-            />
+        android:id="@+id/mnuChooseIceImage"
+        android:icon="@drawable/baseline_photo_size_select_actual_white_24dp"
+        android:title="@string/choose_ice"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/mnuCreateOffer"
+        android:icon="@drawable/json"
+        android:title="@string/create_offer"
+        app:showAsAction="ifRoom" />
 </menu>

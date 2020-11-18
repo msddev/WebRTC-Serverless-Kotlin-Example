@@ -7,7 +7,6 @@ import cz.sazel.android.serverlesswebrtcandroid.jingleTurnReceiver.JistiServiceM
 import org.json.JSONException
 import org.json.JSONObject
 import org.webrtc.*
-import java.util.*
 
 /**
  * This class handles all around WebRTC peer connections.
@@ -220,45 +219,54 @@ class ServerlessRTCClient(
      * List of servers that will be used to establish the direct connection, STUN/TURN should be supported.
      */
 
+    private var iceServers: MutableList<PeerConnection.IceServer> = arrayListOf()
     private fun getIceServer(): List<PeerConnection.IceServer> {
-        val iceServers: MutableList<PeerConnection.IceServer> = ArrayList()
 
-        PeerConnection.IceServer.builder("stun://stun.l.google.com:19302").apply {
-            setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
-            iceServers.add(createIceServer())
-        }
+        return if (iceServers.isNotEmpty()) {
+            iceServers
+        } else {
+            PeerConnection.IceServer.builder("stun://stun.l.google.com:19302").apply {
+                setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
+                iceServers.add(createIceServer())
+            }
 
-        turns.forEach {
-            when (it.type) {
-                /*"stun" -> {
-                    PeerConnection.IceServer.builder("${it.type}:${it.host}:${it.port}").apply {
-                        setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
-                        iceServers.add(createIceServer())
-                    }
-                }*/
-                "turn" -> {
-                    PeerConnection.IceServer.builder("${it.type}:${it.host}:${it.port}?transport=tcp")
-                        .apply {
+            turns.forEach {
+                when (it.type) {
+                    /*"stun" -> {
+                        PeerConnection.IceServer.builder("${it.type}:${it.host}:${it.port}").apply {
                             setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
-                            setUsername(it.username)
-                            setPassword(it.password)
-
                             iceServers.add(createIceServer())
                         }
-                }
-                "turns" -> {
-                    PeerConnection.IceServer.builder("${it.type}:${it.host}:${it.port}?transport=udp")
-                        .apply {
-                            setUsername(it.username)
-                            setPassword(it.password)
+                    }*/
+                    "turn" -> {
+                        PeerConnection.IceServer.builder("${it.type}:${it.host}:${it.port}?transport=tcp")
+                            .apply {
+                                setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
+                                setUsername(it.username)
+                                setPassword(it.password)
 
-                            iceServers.add(createIceServer())
-                        }
+                                console.greenf("URL : ${it.type}:${it.host}:${it.port}?transport=tcp")
+                                console.greenf("USER NAME : " + it.username)
+                                console.greenf("PASSWORD : " + it.password)
+
+                                iceServers.add(createIceServer())
+                            }
+                    }
+                    /*"turns" -> {
+                        PeerConnection.IceServer.builder("${it.type}:${it.host}:${it.port}?transport=udp")
+                            .apply {
+                                setUsername(it.username)
+                                setPassword(it.password)
+
+                                iceServers.add(createIceServer())
+                            }
+                    }*/
                 }
             }
+
+            iceServers
         }
 
-        return iceServers
     }
 
     enum class State {
