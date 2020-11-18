@@ -19,13 +19,13 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.ayush.imagesteganographylibrary.Text.AsyncTaskCallback.TextDecodingCallback
-import com.ayush.imagesteganographylibrary.Text.AsyncTaskCallback.TextEncodingCallback
-import com.ayush.imagesteganographylibrary.Text.ImageSteganography
 import cz.sazel.android.serverlesswebrtcandroid.R.layout.activity_main
 import cz.sazel.android.serverlesswebrtcandroid.console.RecyclerViewConsole
 import cz.sazel.android.serverlesswebrtcandroid.jingleTurnReceiver.JingleServer
 import cz.sazel.android.serverlesswebrtcandroid.jingleTurnReceiver.JistiServiceModel
+import cz.sazel.android.serverlesswebrtcandroid.steganography.AsyncTaskCallback.TextDecodingCallback
+import cz.sazel.android.serverlesswebrtcandroid.steganography.AsyncTaskCallback.TextEncodingCallback
+import cz.sazel.android.serverlesswebrtcandroid.steganography.ImageSteganography
 import cz.sazel.android.serverlesswebrtcandroid.steganography.TextDecoding
 import cz.sazel.android.serverlesswebrtcandroid.steganography.TextEncoding
 import cz.sazel.android.serverlesswebrtcandroid.webrtc.ServerlessRTCClient
@@ -299,7 +299,7 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
             fileOutputStream.close()
         }.onSuccess {
             val intent = Intent(Intent.ACTION_SEND)
-            intent.type = "image/jpeg*"
+            intent.type = "image/png*"
             intent.putExtra(Intent.EXTRA_STREAM, getUriFormFile(file))
             ContextCompat.startActivity(this, Intent.createChooser(intent, "Share Image"), null)
 

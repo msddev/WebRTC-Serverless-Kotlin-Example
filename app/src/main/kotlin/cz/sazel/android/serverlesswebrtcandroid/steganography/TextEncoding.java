@@ -4,14 +4,11 @@ import android.graphics.Bitmap;
 import android.os.AsyncTask;
 import android.util.Log;
 
-import com.ayush.imagesteganographylibrary.Text.AsyncTaskCallback.TextEncodingCallback;
-import com.ayush.imagesteganographylibrary.Text.EncodeDecode;
-import com.ayush.imagesteganographylibrary.Text.ImageSteganography;
-import com.ayush.imagesteganographylibrary.Utils.Crypto;
-import com.ayush.imagesteganographylibrary.Utils.Utility;
-
 import java.util.Iterator;
 import java.util.List;
+
+import cz.sazel.android.serverlesswebrtcandroid.steganography.AsyncTaskCallback.TextEncodingCallback;
+import cz.sazel.android.serverlesswebrtcandroid.steganography.Utils.Utility;
 
 public class TextEncoding extends AsyncTask<ImageSteganography, Integer, ImageSteganography> {
     private static String TAG = TextEncoding.class.getName();
@@ -29,7 +26,6 @@ public class TextEncoding extends AsyncTask<ImageSteganography, Integer, ImageSt
 
     protected ImageSteganography doInBackground(ImageSteganography... imageSteganographies) {
         this.result = new ImageSteganography();
-        Crypto encryption = null;
         if (imageSteganographies.length > 0) {
             ImageSteganography textStegnography = imageSteganographies[0];
             Bitmap bitmap = textStegnography.getImage();
