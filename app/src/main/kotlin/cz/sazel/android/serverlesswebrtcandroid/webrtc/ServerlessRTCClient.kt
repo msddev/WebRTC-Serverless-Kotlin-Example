@@ -386,9 +386,6 @@ class ServerlessRTCClient(
                 val offer = SessionDescription(SessionDescription.Type.OFFER, sdp)
                 pcInitialized = true
 
-                val rtcConfig = PeerConnection.RTCConfiguration(getIceServer())
-                rtcConfig.iceTransportsType = PeerConnection.IceTransportsType.RELAY
-
                 //we have remote offer, let's create answer for that
                 peerConnection?.setRemoteDescription(object : DefaultSdpObserver() {
                     override fun onSetSuccess() {
@@ -449,10 +446,6 @@ class ServerlessRTCClient(
     fun makeOffer() {
         state = State.CREATING_OFFER
         pcInitialized = true
-
-        val rtcConfig = PeerConnection.RTCConfiguration(getIceServer())
-        rtcConfig.iceTransportsType = PeerConnection.IceTransportsType.RELAY
-
 
         peerConnection?.createOffer(object : DefaultSdpObserver() {
             override fun onCreateSuccess(p0: SessionDescription?) {
