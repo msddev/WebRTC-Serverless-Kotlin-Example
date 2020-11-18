@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.recyclerview.widget.RecyclerView
+import cz.sazel.android.serverlesswebrtcandroid.IceCandidateCallback
 import cz.sazel.android.serverlesswebrtcandroid.adapters.ConsoleAdapter
 import java.util.*
 
@@ -35,9 +36,9 @@ class RecyclerViewConsole(val view: RecyclerView) : IConsole {
     }
 
 
-    fun initialize(bundle: Bundle?) {
+    fun initialize(bundle: Bundle?, listener: IceCandidateCallback) {
         lines = bundle?.getStringArrayList(SAVE_LINES) ?: ArrayList()
-        view.adapter = ConsoleAdapter(lines)
+        view.adapter = ConsoleAdapter(lines, listener)
         handler = Handler(Looper.getMainLooper())
     }
 

@@ -55,6 +55,8 @@ dependencies {
     implementation 'com.google.code.gson:gson:2.8.6'
 
     implementation 'pub.devrel:easypermissions:3.0.0'
-    implementation 'org.webrtc:google-webrtc:1.0.32006'
     implementation 'org.java-websocket:Java-WebSocket:1.5.1'
+    implementation 'com.github.aagarwal1012:Image-Steganography-Library-Android:v1.0'
+    implementation 'com.github.ihimanshurawat:ImageWorker:1.0'
+
 }
