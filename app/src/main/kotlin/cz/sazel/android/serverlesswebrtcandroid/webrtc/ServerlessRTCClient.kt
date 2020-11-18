@@ -252,7 +252,7 @@ class ServerlessRTCClient(
                                 iceServers.add(createIceServer())
                             }
                     }
-                    /*"turns" -> {
+                    "turns" -> {
                         PeerConnection.IceServer.builder("${it.type}:${it.host}:${it.port}?transport=udp")
                             .apply {
                                 setUsername(it.username)
@@ -260,7 +260,7 @@ class ServerlessRTCClient(
 
                                 iceServers.add(createIceServer())
                             }
-                    }*/
+                    }
                 }
             }
 
