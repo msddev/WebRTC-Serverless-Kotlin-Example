@@ -8,15 +8,12 @@ import org.json.JSONException
 import org.json.JSONObject
 import org.webrtc.*
 
-/**
- * This class handles all around WebRTC peer connections.
- */
 class ServerlessRTCClient(
-    val turns: MutableList<JistiServiceModel>,
-    val console: IConsole,
-    val context: Context,
-    val rootEglBase: EglBase,
-    val listener: IStateChangeListener
+    private val turns: MutableList<JistiServiceModel>,
+    private val console: IConsole,
+    private val context: Context,
+    private val rootEglBase: EglBase,
+    private val listener: IStateChangeListener
 ) {
 
     private lateinit var remoteVideoTrack: VideoTrack
@@ -26,7 +23,30 @@ class ServerlessRTCClient(
     private var peerConnection: PeerConnection? = null
     private var pcInitialized: Boolean = false
 
-    var channel: DataChannel? = null
+    private val JSON_TYPE = "type"
+    private val JSON_SDP = "sdp"
+
+    private var videoCapturer: VideoCapturer? = null
+    private lateinit var audioConstraints: MediaConstraints
+    private var videoSource: VideoSource? = null
+    private lateinit var videoTrackFromCamera: VideoTrack
+    private lateinit var audioSource: AudioSource
+    private lateinit var localAudioTrack: AudioTrack
+    private var iceServers: MutableList<PeerConnection.IceServer> = arrayListOf()
+
+    private lateinit var peerConnectionFactory: PeerConnectionFactory
+    private val sdpMediaConstraints = object : MediaConstraints() {
+        init {
+            mandatory.add(KeyValuePair("OfferToReceiveAudio", "true"))
+            mandatory.add(KeyValuePair("OfferToReceiveVideo", "true"))
+        }
+    }
+
+    var state: State = State.INITIALIZING
+        private set(value) {
+            field = value
+            listener.onStateChanged(value)
+        }
 
     /**
      * initialize SurfaceViews for local and remote
@@ -47,86 +67,30 @@ class ServerlessRTCClient(
         this.surfaceViewRemote.setMirror(true)
     }
 
-    private var videoCapturer: VideoCapturer? = null
-    private lateinit var audioConstraints: MediaConstraints
-    private var videoSource: VideoSource? = null
-    private lateinit var videoTrackFromCamera: VideoTrack
-    private lateinit var audioSource: AudioSource
-    private lateinit var localAudioTrack: AudioTrack
-
-    fun createVideoTrackFromCameraAndShowIt() {
-        audioConstraints = MediaConstraints()
-        videoCapturer = createVideoCapturer()
-
-        // First create a Video Source, then we can make a Video Track
-        videoCapturer?.let {
-            val surfaceTextureHelper =
-                SurfaceTextureHelper.create("CaptureThread", rootEglBase.eglBaseContext)
-            videoSource = peerConnectionFactory.createVideoSource(it.isScreencast)
-            it.initialize(
-                surfaceTextureHelper,
-                context,
-                videoSource?.capturerObserver
-            )
-
-            videoCapturer?.startCapture(
-                VIDEO_RESOLUTION_WIDTH,
-                VIDEO_RESOLUTION_HEIGHT,
-                FPS
-            )
-            videoTrackFromCamera = peerConnectionFactory.createVideoTrack(
-                VIDEO_TRACK_ID,
-                videoSource
-            )
-            videoTrackFromCamera.setEnabled(true)
-            videoTrackFromCamera.addSink(surfaceViewLocal)
-
-            // First we create an AudioSource then we can create our AudioTrack
-            audioSource = peerConnectionFactory.createAudioSource(audioConstraints)
-            localAudioTrack = peerConnectionFactory.createAudioTrack("101", audioSource)
-        } ?: run {
-            Log.e(TAG, "videoCapturer is null!")
-        }
-    }
-
-    // Creates a VideoCapturerAndroid instance for the device name
-    private fun createVideoCapturer(): VideoCapturer? {
-        return if (useCamera2()) {
-            createCameraCapturer(Camera2Enumerator(context))
-        } else {
-            createCameraCapturer(Camera1Enumerator(true))
-        }
-    }
-
-    private fun createCameraCapturer(enumerator: CameraEnumerator): VideoCapturer? {
-        // Returns the number of cams & front/back face device name
-
-        val deviceNames = enumerator.deviceNames
-        for (deviceName in deviceNames) {
-            if (enumerator.isFrontFacing(deviceName)) {
-                val videoCapturer: VideoCapturer? = enumerator.createCapturer(deviceName, null)
-                if (videoCapturer != null) {
-                    return videoCapturer
-                }
-            }
-        }
-        for (deviceName in deviceNames) {
-            if (!enumerator.isFrontFacing(deviceName)) {
-                val videoCapturer: VideoCapturer? = enumerator.createCapturer(deviceName, null)
-                if (videoCapturer != null) {
-                    return videoCapturer
-                }
-            }
-        }
-        return null
-    }
-
-    private fun useCamera2(): Boolean {
-        return Camera2Enumerator.isSupported(context)
-    }
-
     fun initializePeerConnections() {
         peerConnection = createPeerConnection(peerConnectionFactory)
+    }
+
+    /**
+     * Call this before using anything else from PeerConnection.
+     */
+    fun initializePeerConnectionFactory() {
+        val options: PeerConnectionFactory.InitializationOptions =
+            PeerConnectionFactory.InitializationOptions
+                .builder(context)
+                .createInitializationOptions()
+
+        PeerConnectionFactory.initialize(options)
+
+        peerConnectionFactory = PeerConnectionFactory.builder()
+            .setOptions(PeerConnectionFactory.Options())
+            .setVideoDecoderFactory(DefaultVideoDecoderFactory(rootEglBase.eglBaseContext))
+            .setVideoEncoderFactory(
+                DefaultVideoEncoderFactory(rootEglBase.eglBaseContext, true, true)
+            ).createPeerConnectionFactory()
+
+        state = State.INITIALIZING
+        Log.d(TAG, "Peer connection factory created.")
     }
 
     private fun createPeerConnection(factory: PeerConnectionFactory): PeerConnection? {
@@ -141,7 +105,6 @@ class ServerlessRTCClient(
                 console.d("ice connection state change:${iceConnectionState.name}")
                 if (iceConnectionState == PeerConnection.IceConnectionState.DISCONNECTED) {
                     console.d("closing channel")
-                    channel?.close()
                 }
             }
 
@@ -208,6 +171,76 @@ class ServerlessRTCClient(
         return factory.createPeerConnection(rtcConfig, pcObserver)
     }
 
+    fun createVideoTrackFromCameraAndShowIt() {
+        audioConstraints = MediaConstraints()
+        videoCapturer = createVideoCapturer()
+
+        // First create a Video Source, then we can make a Video Track
+        videoCapturer?.let {
+            val surfaceTextureHelper =
+                SurfaceTextureHelper.create("CaptureThread", rootEglBase.eglBaseContext)
+            videoSource = peerConnectionFactory.createVideoSource(it.isScreencast)
+            it.initialize(
+                surfaceTextureHelper,
+                context,
+                videoSource?.capturerObserver
+            )
+
+            videoCapturer?.startCapture(
+                VIDEO_RESOLUTION_WIDTH,
+                VIDEO_RESOLUTION_HEIGHT,
+                FPS
+            )
+            videoTrackFromCamera = peerConnectionFactory.createVideoTrack(
+                VIDEO_TRACK_ID,
+                videoSource
+            )
+            videoTrackFromCamera.setEnabled(true)
+            videoTrackFromCamera.addSink(surfaceViewLocal)
+
+            // First we create an AudioSource then we can create our AudioTrack
+            audioSource = peerConnectionFactory.createAudioSource(audioConstraints)
+            localAudioTrack = peerConnectionFactory.createAudioTrack("101", audioSource)
+        } ?: run {
+            Log.e(TAG, "videoCapturer is null!")
+        }
+    }
+
+    private fun createVideoCapturer(): VideoCapturer? {
+        return if (useCamera2()) {
+            createCameraCapturer(Camera2Enumerator(context))
+        } else {
+            createCameraCapturer(Camera1Enumerator(true))
+        }
+    }
+
+    private fun createCameraCapturer(enumerator: CameraEnumerator): VideoCapturer? {
+        // Returns the number of cams & front/back face device name
+
+        val deviceNames = enumerator.deviceNames
+        for (deviceName in deviceNames) {
+            if (enumerator.isFrontFacing(deviceName)) {
+                val videoCapturer: VideoCapturer? = enumerator.createCapturer(deviceName, null)
+                if (videoCapturer != null) {
+                    return videoCapturer
+                }
+            }
+        }
+        for (deviceName in deviceNames) {
+            if (!enumerator.isFrontFacing(deviceName)) {
+                val videoCapturer: VideoCapturer? = enumerator.createCapturer(deviceName, null)
+                if (videoCapturer != null) {
+                    return videoCapturer
+                }
+            }
+        }
+        return null
+    }
+
+    private fun useCamera2(): Boolean {
+        return Camera2Enumerator.isSupported(context)
+    }
+
     fun startStreamingVideo() {
         val mediaStream = peerConnectionFactory.createLocalMediaStream("ARDAMS")
         mediaStream.addTrack(videoTrackFromCamera)
@@ -215,11 +248,109 @@ class ServerlessRTCClient(
         peerConnection?.addStream(mediaStream)
     }
 
-    /**
-     * List of servers that will be used to establish the direct connection, STUN/TURN should be supported.
-     */
+    fun sessionDescriptionToJSON(sessDesc: SessionDescription): JSONObject {
+        val json = JSONObject()
+        json.put(JSON_TYPE, sessDesc.type.canonicalForm())
+        json.put(JSON_SDP, sessDesc.description)
+        return json
+    }
 
-    private var iceServers: MutableList<PeerConnection.IceServer> = arrayListOf()
+
+    /**
+     * Wait for an offer to be entered by user.
+     */
+    fun waitForOffer() {
+        state = State.WAITING_FOR_OFFER
+    }
+
+
+    /**
+     * Process offer that was entered by user (this is called getOffer() in JavaScript example)
+     */
+    fun processOffer(sdpJSON: String) {
+        try {
+            val json = JSONObject(sdpJSON)
+            val type = json.getString(JSON_TYPE)
+            val sdp = json.getString(JSON_SDP)
+            state = State.CREATING_ANSWER
+            if (type == "offer") {
+                val offer = SessionDescription(SessionDescription.Type.OFFER, sdp)
+                pcInitialized = true
+
+                //we have remote offer, let's create answer for that
+                peerConnection?.setRemoteDescription(object : DefaultSdpObserver() {
+                    override fun onSetSuccess() {
+                        super.onSetSuccess()
+                        console.d("Remote description set.")
+
+                        peerConnection?.createAnswer(object : DefaultSdpObserver() {
+                            override fun onCreateSuccess(p0: SessionDescription?) {
+                                //answer is ready, set it
+                                console.d("Local description set.")
+                                peerConnection?.setLocalDescription(DefaultSdpObserver(), p0)
+                            }
+                        }, MediaConstraints())
+
+                    }
+                }, offer)
+            } else {
+                console.redf("Invalid or unsupported offer.")
+                state = State.WAITING_FOR_OFFER
+            }
+        } catch (e: JSONException) {
+            console.redf("bad json")
+            state = State.WAITING_FOR_OFFER
+        }
+    }
+
+
+    /**
+     * App creates the offer.
+     */
+    fun makeOffer() {
+        state = State.CREATING_OFFER
+        pcInitialized = true
+
+        peerConnection?.createOffer(object : DefaultSdpObserver() {
+            override fun onCreateSuccess(p0: SessionDescription?) {
+                if (p0 != null) {
+                    console.d("offer updated")
+                    peerConnection?.setLocalDescription(object : DefaultSdpObserver() {
+                        override fun onCreateSuccess(p0: SessionDescription?) {
+                        }
+                    }, p0)
+                }
+            }
+        }, sdpMediaConstraints)
+    }
+
+    /**
+     * Process answer that was entered by user (this is called getAnswer() in JavaScript example)
+     */
+    fun processAnswer(sdpJSON: String) {
+        try {
+            val json = JSONObject(sdpJSON)
+            val type = json.getString(JSON_TYPE)
+            val sdp = json.getString(JSON_SDP)
+            state = State.WAITING_TO_CONNECT
+            if (type == "answer") {
+                val answer = SessionDescription(SessionDescription.Type.ANSWER, sdp)
+                peerConnection?.setRemoteDescription(DefaultSdpObserver(), answer)
+            } else {
+                console.redf("Invalid or unsupported answer.")
+                state = State.WAITING_FOR_ANSWER
+            }
+        } catch (e: JSONException) {
+            console.redf("bad json")
+            state = State.WAITING_FOR_ANSWER
+        }
+    }
+
+    private fun doShowAnswer(sdp: SessionDescription) {
+        console.printf("Here is your answer:")
+        console.greenf("${sessionDescriptionToJSON(sdp)}")
+    }
+
     private fun getIceServer(): List<PeerConnection.IceServer> {
 
         return if (iceServers.isNotEmpty()) {
@@ -239,13 +370,14 @@ class ServerlessRTCClient(
                         }
                     }*/
                     "turn" -> {
-                        PeerConnection.IceServer.builder("${it.type}:${it.host}:${it.port}?transport=tcp")
+                        val turnUrl = "${it.type}:${it.host}:${it.port}?transport=tcp"
+                        PeerConnection.IceServer.builder(turnUrl)
                             .apply {
                                 setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
                                 setUsername(it.username)
                                 setPassword(it.password)
 
-                                console.greenf("URL : ${it.type}:${it.host}:${it.port}?transport=tcp")
+                                console.greenf("URL : $turnUrl")
                                 console.greenf("USER NAME : " + it.username)
                                 console.greenf("PASSWORD : " + it.password)
 
@@ -253,8 +385,10 @@ class ServerlessRTCClient(
                             }
                     }
                     "turns" -> {
-                        PeerConnection.IceServer.builder("${it.type}:${it.host}:${it.port}?transport=udp")
+                        val turnsUrl = "${it.type}:${it.host}:${it.port}?transport=udp"
+                        PeerConnection.IceServer.builder(turnsUrl)
                             .apply {
+                                setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
                                 setUsername(it.username)
                                 setPassword(it.password)
 
@@ -267,6 +401,32 @@ class ServerlessRTCClient(
             iceServers
         }
 
+    }
+
+    interface IStateChangeListener {
+        /**
+         * Called when status of client is changed.
+         */
+        fun onStateChanged(state: State)
+    }
+
+    open inner class DefaultSdpObserver : SdpObserver {
+
+        override fun onCreateSuccess(p0: SessionDescription?) {
+
+        }
+
+        override fun onCreateFailure(p0: String?) {
+            console.e("failed to create offer:$p0")
+        }
+
+        override fun onSetFailure(p0: String?) {
+            console.e("set failure:$p0")
+        }
+
+        override fun onSetSuccess() {
+            console.i("set success")
+        }
     }
 
     enum class State {
@@ -309,177 +469,6 @@ class ServerlessRTCClient(
          * Connection is terminated chat ended.
          */
         CHAT_ENDED
-    }
-
-    private lateinit var peerConnectionFactory: PeerConnectionFactory
-    private val sdpMediaConstraints = object : MediaConstraints() {
-        init {
-            mandatory.add(KeyValuePair("OfferToReceiveAudio", "true"))
-            mandatory.add(KeyValuePair("OfferToReceiveVideo", "true"))
-        }
-    }
-
-    var state: State = State.INITIALIZING
-        private set(value) {
-            field = value
-            listener.onStateChanged(value)
-        }
-
-
-    interface IStateChangeListener {
-        /**
-         * Called when status of client is changed.
-         */
-        fun onStateChanged(state: State)
-    }
-
-    open inner class DefaultSdpObserver : SdpObserver {
-
-        override fun onCreateSuccess(p0: SessionDescription?) {
-
-        }
-
-        override fun onCreateFailure(p0: String?) {
-            console.e("failed to create offer:$p0")
-        }
-
-        override fun onSetFailure(p0: String?) {
-            console.e("set failure:$p0")
-        }
-
-        override fun onSetSuccess() {
-            console.i("set success")
-        }
-    }
-
-    private val JSON_TYPE = "type"
-    private val JSON_MESSAGE = "message"
-    private val JSON_SDP = "sdp"
-
-
-    fun sessionDescriptionToJSON(sessDesc: SessionDescription): JSONObject {
-        val json = JSONObject()
-        json.put(JSON_TYPE, sessDesc.type.canonicalForm())
-        json.put(JSON_SDP, sessDesc.description)
-        return json
-    }
-
-
-    /**
-     * Wait for an offer to be entered by user.
-     */
-    fun waitForOffer() {
-        state = State.WAITING_FOR_OFFER
-    }
-
-
-    /**
-     * Process offer that was entered by user (this is called getOffer() in JavaScript example)
-     */
-    fun processOffer(sdpJSON: String) {
-        try {
-            val json = JSONObject(sdpJSON)
-            val type = json.getString(JSON_TYPE)
-            val sdp = json.getString(JSON_SDP)
-            state = State.CREATING_ANSWER
-            if (type != null && sdp != null && type == "offer") {
-                val offer = SessionDescription(SessionDescription.Type.OFFER, sdp)
-                pcInitialized = true
-
-                //we have remote offer, let's create answer for that
-                peerConnection?.setRemoteDescription(object : DefaultSdpObserver() {
-                    override fun onSetSuccess() {
-                        super.onSetSuccess()
-                        console.d("Remote description set.")
-
-                        peerConnection?.createAnswer(object : DefaultSdpObserver() {
-                            override fun onCreateSuccess(p0: SessionDescription?) {
-                                //answer is ready, set it
-                                console.d("Local description set.")
-                                peerConnection?.setLocalDescription(DefaultSdpObserver(), p0)
-                            }
-                        }, MediaConstraints())
-
-                    }
-                }, offer)
-            } else {
-                console.redf("Invalid or unsupported offer.")
-                state = State.WAITING_FOR_OFFER
-            }
-        } catch (e: JSONException) {
-            console.redf("bad json")
-            state = State.WAITING_FOR_OFFER
-        }
-    }
-
-
-    /**
-     * Process answer that was entered by user (this is called getAnswer() in JavaScript example)
-     */
-    fun processAnswer(sdpJSON: String) {
-        try {
-            val json = JSONObject(sdpJSON)
-            val type = json.getString(JSON_TYPE)
-            val sdp = json.getString(JSON_SDP)
-            state = State.WAITING_TO_CONNECT
-            if (type != null && sdp != null && type == "answer") {
-                val answer = SessionDescription(SessionDescription.Type.ANSWER, sdp)
-                peerConnection?.setRemoteDescription(DefaultSdpObserver(), answer)
-            } else {
-                console.redf("Invalid or unsupported answer.")
-                state = State.WAITING_FOR_ANSWER
-            }
-        } catch (e: JSONException) {
-            console.redf("bad json")
-            state = State.WAITING_FOR_ANSWER
-        }
-    }
-
-    private fun doShowAnswer(sdp: SessionDescription) {
-        console.printf("Here is your answer:")
-        console.greenf("${sessionDescriptionToJSON(sdp)}")
-    }
-
-    /**
-     * App creates the offer.
-     */
-    fun makeOffer() {
-        state = State.CREATING_OFFER
-        pcInitialized = true
-
-        peerConnection?.createOffer(object : DefaultSdpObserver() {
-            override fun onCreateSuccess(p0: SessionDescription?) {
-                if (p0 != null) {
-                    console.d("offer updated")
-                    peerConnection?.setLocalDescription(object : DefaultSdpObserver() {
-                        override fun onCreateSuccess(p0: SessionDescription?) {
-                        }
-                    }, p0)
-                }
-            }
-        }, sdpMediaConstraints)
-    }
-
-    /**
-     * Call this before using anything else from PeerConnection.
-     */
-    fun initializePeerConnectionFactory() {
-        val options: PeerConnectionFactory.InitializationOptions =
-            PeerConnectionFactory.InitializationOptions
-                .builder(context)
-                .createInitializationOptions()
-
-        PeerConnectionFactory.initialize(options)
-
-        peerConnectionFactory = PeerConnectionFactory.builder()
-            .setOptions(PeerConnectionFactory.Options())
-            .setVideoDecoderFactory(DefaultVideoDecoderFactory(rootEglBase.eglBaseContext))
-            .setVideoEncoderFactory(
-                DefaultVideoEncoderFactory(rootEglBase.eglBaseContext, true, true)
-            ).createPeerConnectionFactory()
-
-        state = State.INITIALIZING
-        Log.d(TAG, "Peer connection factory created.")
     }
 
     companion object {
