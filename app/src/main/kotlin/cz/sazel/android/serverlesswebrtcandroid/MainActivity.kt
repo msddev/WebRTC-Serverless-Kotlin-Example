@@ -6,7 +6,9 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import android.os.*
+import android.os.Bundle
+import android.os.CountDownTimer
+import android.os.Environment
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
@@ -49,7 +51,7 @@ import kotlin.collections.ArrayList
 
 
 class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListener,
-    ActivityCompat.OnRequestPermissionsResultCallback {
+    ActivityCompat.OnRequestPermissionsResultCallback, ServerlessRTCClient.ICountDownTimer {
 
     private val FILE_REQUEST_CODE: Int = 1001
     private lateinit var console: RecyclerViewConsole
@@ -153,25 +155,19 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
     }
 
     private fun initServerLessRtc(turns: MutableList<JistiServiceModel>) {
-        val retainedClient = lastCustomNonConfigurationInstance as ServerlessRTCClient?
-        if (retainedClient == null) {
-
-            client = ServerlessRTCClient(
-                turns,
-                console,
-                applicationContext,
-                EglBase.create(),
-                this
-            )
-            try {
-                client.initializePeerConnectionFactory()
-            } catch (e: Exception) {
-                Toast.makeText(this, e.message, Toast.LENGTH_LONG).show()
-                e.printStackTrace()
-            }
-        } else {
-            client = retainedClient
-            onStateChanged(client.state)
+        client = ServerlessRTCClient(
+            turns,
+            console,
+            applicationContext,
+            EglBase.create(),
+            this,
+            this
+        )
+        try {
+            client.initializePeerConnectionFactory()
+        } catch (e: Exception) {
+            Toast.makeText(this, e.message, Toast.LENGTH_LONG).show()
+            e.printStackTrace()
         }
     }
 
@@ -179,17 +175,13 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
         when (client.state) {
             WAITING_FOR_OFFER -> client.processOffer(newText)
             WAITING_FOR_ANSWER -> client.processAnswer(newText)
-            CHAT_ESTABLISHED -> { }
+            CHAT_ESTABLISHED -> {
+            }
             else -> {
                 if (newText.isNotBlank()) console.printf(newText)
             }
         }
         edEnterArea.setText("")
-    }
-
-    override fun onRetainCustomNonConfigurationInstance(): Any? {
-        retainInstance = true
-        return client
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -218,12 +210,6 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
         }
 
         return super.onOptionsItemSelected(item)
-    }
-
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        console.onSaveInstanceState(outState)
     }
 
     override fun onStateChanged(state: ServerlessRTCClient.State) {
@@ -307,8 +293,7 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
                     }
                 }
             }
-        }
-        )
+        })
 
         textDecoding.execute(imageSteganography);
     }
@@ -347,14 +332,6 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
         }
     }
 
-    override fun onSaveInstanceState(outState: Bundle, outPersistentState: PersistableBundle) {
-        outState.clear()
-    }
-
-    /*private fun getFileText(): String {
-        return resources.openRawResource(R.raw.testfile).bufferedReader().use { it.readText() }
-    }*/
-
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
 
@@ -389,6 +366,26 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
 
     companion object {
         private const val RC_CALL = 111
+    }
+
+    override fun startTimer(offer: String) {
+        runOnUiThread {
+            object : CountDownTimer(60000, 10000) {
+                override fun onTick(millisUntilFinished: Long) {
+                    val time = 59 - (millisUntilFinished / 1000)
+
+                    if (time > 0) {
+                        console.bluef("$time seconds elapsed")
+                    }
+                }
+
+                override fun onFinish() {
+                    console.printf("Your offer is:")
+                    console.greenf(offer)
+                    client.state = WAITING_FOR_ANSWER
+                }
+            }.start()
+        }
     }
 }
 

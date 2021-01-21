@@ -13,7 +13,8 @@ class ServerlessRTCClient(
     private val console: IConsole,
     private val context: Context,
     private val rootEglBase: EglBase,
-    private val listener: IStateChangeListener
+    private val listener: IStateChangeListener,
+    private val countDownTimer: ICountDownTimer
 ) {
 
     private lateinit var remoteVideoTrack: VideoTrack
@@ -39,11 +40,12 @@ class ServerlessRTCClient(
         init {
             mandatory.add(KeyValuePair("OfferToReceiveAudio", "true"))
             mandatory.add(KeyValuePair("OfferToReceiveVideo", "true"))
+            optional.add(KeyValuePair("DtlsSrtpKeyAgreement", "true"))
         }
     }
 
     var state: State = State.INITIALIZING
-        private set(value) {
+        set(value) {
             field = value
             listener.onStateChanged(value)
         }
@@ -75,12 +77,12 @@ class ServerlessRTCClient(
      * Call this before using anything else from PeerConnection.
      */
     fun initializePeerConnectionFactory() {
-        val options: PeerConnectionFactory.InitializationOptions =
+        val initializationOptions =
             PeerConnectionFactory.InitializationOptions
                 .builder(context)
                 .createInitializationOptions()
 
-        PeerConnectionFactory.initialize(options)
+        PeerConnectionFactory.initialize(initializationOptions)
 
         peerConnectionFactory = PeerConnectionFactory.builder()
             .setOptions(PeerConnectionFactory.Options())
@@ -98,9 +100,7 @@ class ServerlessRTCClient(
         rtcConfig.tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.ENABLED
         rtcConfig.bundlePolicy = PeerConnection.BundlePolicy.MAXBUNDLE
         rtcConfig.rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE
-        if (state == State.WAITING_FOR_OFFER) {
-            rtcConfig.continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_ONCE
-        }
+        rtcConfig.continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_ONCE
         // Use ECDSA encryption.
         rtcConfig.keyType = PeerConnection.KeyType.ECDSA
         rtcConfig.iceTransportsType = PeerConnection.IceTransportsType.RELAY
@@ -126,9 +126,8 @@ class ServerlessRTCClient(
                 if (iceGatheringState == PeerConnection.IceGatheringState.COMPLETE) {
                     peerConnection?.localDescription?.let {
                         if (it.type == SessionDescription.Type.OFFER) {
-                            console.printf("Your offer is:")
-                            console.greenf("${sessionDescriptionToJSON(it)}")
-                            state = State.WAITING_FOR_ANSWER
+                            console.printf("waiting for register offer(60 second)...")
+                            countDownTimer.startTimer("${sessionDescriptionToJSON(it)}")
                         } else if (it.type == SessionDescription.Type.ANSWER) {
                             //ICE gathering complete, we should have answer now
                             doShowAnswer(it)
@@ -371,27 +370,6 @@ class ServerlessRTCClient(
 
             turns.forEach {
                 when (it.type) {
-                    /*"stun" -> {
-                        PeerConnection.IceServer.builder("${it.type}:${it.host}:${it.port}").apply {
-                            setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
-                            iceServers.add(createIceServer())
-                        }
-                    }*/
-                    "turn" -> {
-                        val turnUrl = "${it.type}:${it.host}:${it.port}?transport=tcp"
-                        PeerConnection.IceServer.builder(turnUrl)
-                            .apply {
-                                setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_INSECURE_NO_CHECK)
-                                setUsername(it.username)
-                                setPassword(it.password)
-
-                                console.greenf("URL : $turnUrl")
-                                console.greenf("USER NAME : " + it.username)
-                                console.greenf("PASSWORD : " + it.password)
-
-                                iceServers.add(createIceServer())
-                            }
-                    }
                     "turns" -> {
                         val turnsUrl = "${it.type}:${it.host}:${it.port}?transport=udp"
                         PeerConnection.IceServer.builder(turnsUrl)
@@ -399,6 +377,10 @@ class ServerlessRTCClient(
                                 setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_INSECURE_NO_CHECK)
                                 setUsername(it.username)
                                 setPassword(it.password)
+
+                                console.greenf("URL : $turnsUrl")
+                                console.greenf("USER NAME : " + it.username)
+                                console.greenf("PASSWORD : " + it.password)
 
                                 iceServers.add(createIceServer())
                             }
@@ -486,5 +468,9 @@ class ServerlessRTCClient(
         private const val VIDEO_RESOLUTION_WIDTH = 640
         private const val VIDEO_RESOLUTION_HEIGHT = 480
         private const val FPS = 30
+    }
+
+    interface ICountDownTimer{
+        fun startTimer(offer: String)
     }
 }
