@@ -1,13 +1,12 @@
 package cz.sazel.android.serverlesswebrtcandroid
 
 import android.Manifest
+import android.content.ClipboardManager
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import android.os.Bundle
-import android.os.Environment
-import android.os.PersistableBundle
+import android.os.*
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
@@ -69,10 +68,16 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
 
         initJingleServer()
 
-        btSubmit.setOnClickListener { sendMessage(edEnterArea.text.toString().trim()) }
-        edEnterArea.setOnEditorActionListener { _, _, _ ->
-            sendMessage(edEnterArea.text.toString().trim())
-            true
+        btSubmit.setOnClickListener {
+            var text: String = edEnterArea.text.toString().trim()
+
+            val clipboard: ClipboardManager =
+                getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+
+            if (text.isEmpty()) {
+                text = clipboard.primaryClip?.getItemAt(0)?.text.toString()
+            }
+            sendMessage(text)
         }
     }
 
@@ -174,9 +179,7 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
         when (client.state) {
             WAITING_FOR_OFFER -> client.processOffer(newText)
             WAITING_FOR_ANSWER -> client.processAnswer(newText)
-            CHAT_ESTABLISHED -> {
-                Log.d("ggggg", "sendMessage: ggggggggggggggggggg")
-            }
+            CHAT_ESTABLISHED -> { }
             else -> {
                 if (newText.isNotBlank()) console.printf(newText)
             }

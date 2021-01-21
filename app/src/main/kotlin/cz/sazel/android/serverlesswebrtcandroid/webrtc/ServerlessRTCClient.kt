@@ -95,6 +95,14 @@ class ServerlessRTCClient(
 
     private fun createPeerConnection(factory: PeerConnectionFactory): PeerConnection? {
         val rtcConfig = PeerConnection.RTCConfiguration(getIceServer())
+        rtcConfig.tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.ENABLED
+        rtcConfig.bundlePolicy = PeerConnection.BundlePolicy.MAXBUNDLE
+        rtcConfig.rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE
+        if (state == State.WAITING_FOR_OFFER) {
+            rtcConfig.continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_ONCE
+        }
+        // Use ECDSA encryption.
+        rtcConfig.keyType = PeerConnection.KeyType.ECDSA
         rtcConfig.iceTransportsType = PeerConnection.IceTransportsType.RELAY
         val pcObserver: PeerConnection.Observer = object : PeerConnection.Observer {
             override fun onSignalingChange(signalingState: PeerConnection.SignalingState) {
@@ -357,7 +365,7 @@ class ServerlessRTCClient(
             iceServers
         } else {
             PeerConnection.IceServer.builder("stun://stun.l.google.com:19302").apply {
-                setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
+                setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_INSECURE_NO_CHECK)
                 iceServers.add(createIceServer())
             }
 
@@ -373,7 +381,7 @@ class ServerlessRTCClient(
                         val turnUrl = "${it.type}:${it.host}:${it.port}?transport=tcp"
                         PeerConnection.IceServer.builder(turnUrl)
                             .apply {
-                                setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
+                                setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_INSECURE_NO_CHECK)
                                 setUsername(it.username)
                                 setPassword(it.password)
 
@@ -388,7 +396,7 @@ class ServerlessRTCClient(
                         val turnsUrl = "${it.type}:${it.host}:${it.port}?transport=udp"
                         PeerConnection.IceServer.builder(turnsUrl)
                             .apply {
-                                setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
+                                setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_INSECURE_NO_CHECK)
                                 setUsername(it.username)
                                 setPassword(it.password)
 
