@@ -14,6 +14,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View.GONE
 import android.view.View.VISIBLE
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -81,6 +82,12 @@ class MainActivity : AppCompatActivity(), ServerlessRTCClient.IStateChangeListen
             }
             sendMessage(text)
         }
+
+        awakeDisplay()
+    }
+
+    private fun awakeDisplay() {
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
     private fun initJingleServer() {
