@@ -7,7 +7,7 @@ Compatible and inspired by this project written for JavaScript by Chris Ball:
 * https://cjb.github.io/serverless-webrtc/serverless-webrtc.html
 
 # What is WebRTC?
-<img src="screenshots/screenshot_01.png">
+<img src="screenshots/screenshot_01.jpeg">
 It's technology for real time peer to peer comunication. Especially useful for transfering audio and video - teleconference apps, but can be used for ordinary data as in this example.
 WebRTC is supported in recent Chrome browser, Node.js and also on Android/iOS.
 
