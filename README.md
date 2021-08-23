@@ -1,4 +1,4 @@
-# serverless-webrtc-android
+# Serverless WebRTC Android Kotlin
 A demo of using WebRTC with no signaling server. But for Android written in Kotlin.
 
 Compatible and inspired by this project written for JavaScript by Chris Ball:
@@ -33,10 +33,19 @@ It uses **libjingle** library, it's a native library for WebRTC that comes with 
 * There is no renegotiation of connection, it doesn't make much sense without signalling server.
 * If you paste offer in the app, answer is created but after while it goes with 'icegathering failed'. You must be fast to pass the answer to the other side. I'm not sure what causes this.
 
-# License
-You can do whatever you want with this code.
+## License & Copyright
+```
+Copyright 2021 Masoud Khoshkam.
 
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
+   http://www.apache.org/licenses/LICENSE-2.0
 
-
-
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
